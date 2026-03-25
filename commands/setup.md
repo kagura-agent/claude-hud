@@ -214,14 +214,52 @@ Read the settings file and merge in the statusLine config, preserving all existi
 If the file doesn't exist, create it. If it contains invalid JSON, report the error and do not overwrite.
 If a write fails with `File has been unexpectedly modified`, re-read the file and retry the merge once.
 
+### Critical: JSON String Escaping Rules
+
+When writing the `{GENERATED_COMMAND}` into the JSON file, you MUST properly escape it as a JSON string:
+
+1. **All backslashes must be doubled**: `\` becomes `\\` in the JSON string
+2. **All dollar signs must be double-escaped**: `$` becomes `\\$` in the JSON string
+3. **Single quotes need no escaping** (JSON uses double quotes for strings)
+
+**Why double-escape dollar signs?** The command contains awk field variables like `$(NF-1)` and `$(0)`. In the shell command these are written with single `$`, but when stored in a JSON string, they must be `\\$` because:
+- JSON string parsing: `\\$` → becomes `\$` after JSON parse
+- Shell interpretation: `\$` → becomes literal `$` character (not variable expansion)
+
+Without the double-escape, Claude Code's JSON parser will fail with "Unexpected token $ in JSON".
+
+Example transformation for the awk command section:
+```
+Shell command:  awk -F/ '{ print $(NF-1) "\t" $(0) }'
+JSON string:    "awk -F/ '{ print \\$(NF-1) \"\\t\" \\$(0) }'"
+                                    ↑↑            ↑↑
+                                    note the double backslash before each $
+```
+
+**Common mistake**: Writing `\"awk ... \$(NF-1)\"` (single backslash) creates invalid JSON because JSON parsers see the lone `$` as an invalid character.
+
+### Expected JSON Format
+
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "{GENERATED_COMMAND}"
+    "command": "{GENERATED_COMMAND with proper JSON escaping}"
   }
 }
 ```
+
+**Concrete example** (bun on macOS/Linux):
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/claude-hud/claude-hud/*/ 2>/dev/null | awk -F/ '\"'\"'{ print \\$(NF-1) \"\\t\" \\$(0) }'\"'\"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec \"/opt/homebrew/bin/bun\" --env-file /dev/null \"${plugin_dir}src/index.ts\"'"
+  }
+}
+```
+
+Note how `$(NF-1)` and `$(0)` in the shell command become `\\$(NF-1)` and `\\$(0)` in the JSON string.
 
 
 After successfully writing the config, tell the user:
