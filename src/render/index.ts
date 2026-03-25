@@ -185,6 +185,12 @@ function sliceVisible(str: string, maxVisible: number): string {
   return result;
 }
 
+function hasProgressBar(str: string): boolean {
+  const plain = stripAnsi(str);
+  // Progress bars contain filled blocks (█) or quota bars
+  return plain.includes('█') || plain.includes('▓') || plain.includes('░');
+}
+
 function truncateToWidth(str: string, maxWidth: number): string {
   if (maxWidth <= 0 || visualLength(str) <= maxWidth) {
     return str;
@@ -278,6 +284,15 @@ function wrapLineToWidth(line: string, maxWidth: number): string[] {
   const parts = splitWrapParts(line);
   if (parts.length <= 1) {
     return [truncateToWidth(line, maxWidth)];
+  }
+
+  // Check if multiple parts contain progress bars
+  const partsWithProgressBars = parts.filter(part => hasProgressBar(part.segment));
+
+  // If multiple segments have progress bars (e.g., Context | Usage), don't wrap them
+  // This ensures both bars remain visible on narrow terminals
+  if (partsWithProgressBars.length >= 2) {
+    return [line];
   }
 
   const wrapped: string[] = [];

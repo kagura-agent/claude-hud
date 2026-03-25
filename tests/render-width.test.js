@@ -287,3 +287,38 @@ test('render truncation respects Unicode display width', () => {
   assert.ok(lines.some(line => line.includes('...')), 'should truncate an overlong Unicode segment');
   assert.ok(lines.every(line => displayWidth(line) <= 10), 'all lines should respect terminal cell width');
 });
+
+test('render preserves progress bars on narrow terminals', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
+  ctx.stdin.context_window = {
+    context_window_size: 200000,
+    current_usage: {
+      input_tokens: 90000,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
+  };
+  ctx.usageData = {
+    planName: 'Team',
+    fiveHour: 30,
+    sevenDay: null,
+    fiveHourResetAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+  ctx.config.display.showUsage = true;
+  ctx.config.display.usageBarEnabled = true;
+
+  let lines = [];
+  withTerminal(40, () => {
+    lines = captureRender(ctx);
+  });
+
+  const contextBarLine = lines.find(line => line.includes('Context') && line.includes('█'));
+  const usageBarLine = lines.find(line => line.includes('Usage') && line.includes('█'));
+
+  assert.ok(contextBarLine, 'Context bar should remain visible');
+  assert.ok(usageBarLine, 'Usage bar should remain visible');
+  assert.ok(contextBarLine.includes('█') || contextBarLine.includes('░'), 'Context bar should contain progress bar characters');
+  assert.ok(usageBarLine.includes('█') || usageBarLine.includes('░'), 'Usage bar should contain progress bar characters');
+});
