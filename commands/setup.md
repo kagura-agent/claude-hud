@@ -214,6 +214,49 @@ Read the settings file and merge in the statusLine config, preserving all existi
 If the file doesn't exist, create it. If it contains invalid JSON, report the error and do not overwrite.
 If a write fails with `File has been unexpectedly modified`, re-read the file and retry the merge once.
 
+### ⚠️ CRITICAL: JSON Escaping Rules
+
+When writing the command string to JSON, **dollar signs (`$`) must appear literally** — they do NOT need escaping in JSON strings.
+
+**DO NOT escape `$` as `\$`** because `\$` is not a valid JSON escape sequence and will cause Claude Code to crash on startup with "Unexpected token" or "Invalid escape sequence" errors.
+
+Only these escape sequences are valid in JSON strings:
+- `\"` (double quote)
+- `\\` (backslash)
+- `\/` (forward slash, optional)
+- `\n` (newline)
+- `\t` (tab)
+- `\r` (carriage return)
+- `\b` (backspace)
+- `\f` (form feed)
+- `\uXXXX` (unicode escape)
+
+The generated commands contain shell variables like `$(NF-1)`, `$HOME`, `$env:CLAUDE_CONFIG_DIR`, and `$p`. All of these dollar signs should appear literally in the JSON string value.
+
+**Example of CORRECT JSON** (bash command with dollar signs literal):
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/claude-hud/claude-hud/*/ 2>/dev/null | awk -F/ '\"'\"'{ print $(NF-1) \"\\t\" $(0) }'\"'\"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec \"/usr/bin/node\" \"${plugin_dir}dist/index.js\"'"
+  }
+}
+```
+
+**Example of CORRECT JSON** (PowerShell command with dollar signs literal):
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "powershell -Command \"& {$claudeDir=if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }; $p=(Get-ChildItem (Join-Path $claudeDir 'plugins\\cache\\claude-hud\\claude-hud') -Directory | Where-Object { $_.Name -match '^\\d+(\\.\\d+)+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).FullName; & 'C:\\Program Files\\nodejs\\node.exe' (Join-Path $p 'dist\\index.js')}\""
+  }
+}
+```
+
+Note that in the PowerShell example, backslashes in Windows paths are escaped as `\\` (which is correct), but dollar signs remain as `$` (not `\\$`).
+
+### Configuration Schema
+
 ```json
 {
   "statusLine": {
