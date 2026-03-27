@@ -20,7 +20,15 @@ export async function readStdin() {
     }
 }
 export function getTotalTokens(stdin) {
-    const usage = stdin.context_window?.current_usage;
+    const contextWindow = stdin.context_window;
+    // Prefer total_input_tokens + total_output_tokens (more accurate)
+    const totalInput = contextWindow?.total_input_tokens;
+    const totalOutput = contextWindow?.total_output_tokens;
+    if (typeof totalInput === 'number' || typeof totalOutput === 'number') {
+        return (totalInput ?? 0) + (totalOutput ?? 0);
+    }
+    // Fallback to current_usage for backwards compatibility
+    const usage = contextWindow?.current_usage;
     return ((usage?.input_tokens ?? 0) +
         (usage?.cache_creation_input_tokens ?? 0) +
         (usage?.cache_read_input_tokens ?? 0));

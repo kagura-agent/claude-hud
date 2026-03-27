@@ -16,6 +16,9 @@ export interface StdinData {
       cache_creation_input_tokens?: number;
       cache_read_input_tokens?: number;
     } | null;
+    // Aggregate token fields (more accurate than current_usage)
+    total_input_tokens?: number;
+    total_output_tokens?: number;
     // Native percentage fields (Claude Code v2.1.6+)
     used_percentage?: number | null;
     remaining_percentage?: number | null;

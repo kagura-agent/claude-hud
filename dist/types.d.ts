@@ -15,6 +15,8 @@ export interface StdinData {
             cache_creation_input_tokens?: number;
             cache_read_input_tokens?: number;
         } | null;
+        total_input_tokens?: number;
+        total_output_tokens?: number;
         used_percentage?: number | null;
         remaining_percentage?: number | null;
     };
