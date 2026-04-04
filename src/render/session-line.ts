@@ -1,9 +1,10 @@
 import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
-import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, getTotalTokens } from '../stdin.js';
+import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, red, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
+import { t } from '../i18n/index.js';
 
 const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG === '*';
 
@@ -12,7 +13,7 @@ const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG ===
  * Used for compact layout mode.
  */
 export function renderSessionLine(ctx: RenderContext): string {
-  const model = getModelName(ctx.stdin);
+  const model = formatModelName(getModelName(ctx.stdin), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
 
   const rawPercent = getContextPercent(ctx.stdin);
   const bufferedPercent = getBufferedPercent(ctx.stdin);
@@ -35,9 +36,7 @@ export function renderSessionLine(ctx: RenderContext): string {
 
   // Model and context bar (FIRST)
   const providerLabel = getProviderLabel(ctx.stdin);
-  const showUsage = display?.showUsage !== false;
-  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-  const modelQualifier = providerLabel ?? (showUsage && hasApiKey ? red('API') : undefined);
+  const modelQualifier = providerLabel ?? undefined;
   const modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
 
   if (display?.showModel !== false && display?.showContextBar !== false) {
@@ -128,7 +127,7 @@ export function renderSessionLine(ctx: RenderContext): string {
       }
 
       if (ctx.rulesCount > 0) {
-        parts.push(label(`${ctx.rulesCount} rules`, colors));
+        parts.push(label(`${ctx.rulesCount} ${t('label.rules')}`, colors));
       }
 
       if (ctx.mcpCount > 0) {
@@ -136,7 +135,7 @@ export function renderSessionLine(ctx: RenderContext): string {
       }
 
       if (ctx.hooksCount > 0) {
-        parts.push(label(`${ctx.hooksCount} hooks`, colors));
+        parts.push(label(`${ctx.hooksCount} ${t('label.hooks')}`, colors));
       }
     }
   }
@@ -147,7 +146,7 @@ export function renderSessionLine(ctx: RenderContext): string {
       const resetTime = ctx.usageData.fiveHour === 100
         ? formatResetTime(ctx.usageData.fiveHourResetAt)
         : formatResetTime(ctx.usageData.sevenDayResetAt);
-      parts.push(critical(`⚠ Limit reached${resetTime ? ` (resets ${resetTime})` : ''}`, colors));
+      parts.push(critical(`⚠ ${t('status.limitReached')}${resetTime ? ` (${t('format.resets')} ${resetTime})` : ''}`, colors));
     } else {
       const usageThreshold = display?.usageThreshold ?? 0;
       const fiveHour = ctx.usageData.fiveHour;
@@ -158,7 +157,7 @@ export function renderSessionLine(ctx: RenderContext): string {
         const usageBarEnabled = display?.usageBarEnabled ?? true;
         if (fiveHour === null && sevenDay !== null) {
           const weeklyOnlyPart = formatUsageWindowPart({
-            label: '7d',
+            label: t('label.weekly'),
             percent: sevenDay,
             resetAt: ctx.usageData.sevenDayResetAt,
             colors,
@@ -180,12 +179,13 @@ export function renderSessionLine(ctx: RenderContext): string {
           const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
           if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
             const sevenDayPart = formatUsageWindowPart({
-              label: '7d',
+              label: t('label.weekly'),
               percent: sevenDay,
               resetAt: ctx.usageData.sevenDayResetAt,
               colors,
               usageBarEnabled,
               barWidth,
+              forceLabel: true,
             });
             parts.push(`${fiveHourPart} | ${sevenDayPart}`);
           } else {
@@ -209,7 +209,7 @@ export function renderSessionLine(ctx: RenderContext): string {
   if (display?.showSpeed) {
     const speed = getOutputSpeed(ctx.stdin);
     if (speed !== null) {
-      parts.push(label(`out: ${speed.toFixed(1)} tok/s`, colors));
+      parts.push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors));
     }
   }
 
@@ -235,7 +235,7 @@ export function renderSessionLine(ctx: RenderContext): string {
     if (usage) {
       const input = formatTokens(usage.input_tokens ?? 0);
       const cache = formatTokens((usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0));
-      line += label(` (in: ${input}, cache: ${cache})`, colors);
+      line += label(` (${t('format.in')}: ${input}, ${t('format.cache')}: ${cache})`, colors);
     }
   }
 
@@ -286,7 +286,7 @@ function formatUsagePercent(percent: number | null, colors?: RenderContext['conf
 }
 
 function formatUsageWindowPart({
-  label,
+  label: windowLabel,
   percent,
   resetAt,
   colors,
@@ -294,7 +294,7 @@ function formatUsageWindowPart({
   barWidth,
   forceLabel = false,
 }: {
-  label: '5h' | '7d';
+  label: string;
   percent: number | null;
   resetAt: Date | null;
   colors?: RenderContext['config']['colors'];
@@ -304,17 +304,18 @@ function formatUsageWindowPart({
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);
   const reset = formatResetTime(resetAt);
+  const styledLabel = label(windowLabel, colors);
 
   if (usageBarEnabled) {
     const body = reset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${reset} / ${label})`
+      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${reset} / ${windowLabel})`
       : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
-    return forceLabel ? `${label}: ${body}` : body;
+    return forceLabel ? `${styledLabel} ${body}` : body;
   }
 
   return reset
-    ? `${label}: ${usageDisplay} (${reset})`
-    : `${label}: ${usageDisplay}`;
+    ? `${styledLabel} ${usageDisplay} (${t('format.resetsIn')} ${reset})`
+    : `${styledLabel} ${usageDisplay}`;
 }
 
 function formatResetTime(resetAt: Date | null): string {

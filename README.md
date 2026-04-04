@@ -39,6 +39,13 @@ Then run the install command below in that session. This is a [Claude Code platf
 /plugin install claude-hud
 ```
 
+After that, reload plugins:
+
+```
+/reload-plugins
+```
+
+
 **Step 3: Configure the statusline**
 ```
 /claude-hud:setup
@@ -47,7 +54,7 @@ Then run the install command below in that session. This is a [Claude Code platf
 <details>
 <summary><strong>⚠️ Windows users: Click here if setup says no JavaScript runtime was found</strong></summary>
 
-If setup says no JavaScript runtime was found on Windows, install one for your shell first. The simplest fallback is Node.js LTS:
+On Windows, Node.js LTS is the recommended runtime for Claude HUD. If setup says no JavaScript runtime was found, install Node.js for your shell first:
 ```powershell
 winget install OpenJS.NodeJS.LTS
 ```
@@ -80,7 +87,7 @@ Claude HUD gives you better insights into what's happening in your Claude Code s
 [Opus] │ my-project git:(main*)
 Context █████░░░░░ 45% │ Usage ██░░░░░░░░ 25% (1h 30m / 5h)
 ```
-- **Line 1** — Model, provider/auth label when relevant (for example `Bedrock` or `API`), project path, git branch
+- **Line 1** — Model, provider label when positively identified (for example `Bedrock`), project path, git branch
 - **Line 2** — Context bar (green → yellow → red) and usage rate limits
 
 ### Optional lines (enable via `/claude-hud:configure`)
@@ -139,10 +146,13 @@ After choosing a preset, you can turn individual elements on or off.
 Edit `~/.claude/plugins/claude-hud/config.json` directly for advanced settings such as `colors.*`,
 `pathLevels`, and threshold overrides. Running `/claude-hud:configure` preserves those manual settings.
 
+Chinese HUD labels are available as an explicit opt-in. English stays the default unless you set `language` in config.
+
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `language` | `en` \| `zh` | `en` | HUD label language. English is the default; set `zh` to enable Chinese labels. |
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
 | `elementOrder` | string[] | `["project","context","usage","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
@@ -186,6 +196,8 @@ Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brig
 
 Usage display is **enabled by default** when Claude Code provides subscriber `rate_limits` data on stdin. It shows your rate limit consumption on line 2 alongside the context bar.
 
+ClaudeHUD intentionally trusts only the official statusline stdin payload for live usage. It does not read local OAuth credentials or poll undocumented usage endpoints in the background.
+
 Free/weekly-only accounts render the weekly window by itself instead of showing a ghost `5h: --` placeholder.
 
 The 7-day percentage appears when above the `display.sevenDayThreshold` (default 80%):
@@ -197,7 +209,7 @@ Context █████░░░░░ 45% │ Usage ██░░░░░░░
 To disable, set `display.showUsage` to `false`.
 
 **Requirements:**
-- Claude subscription usage data from Claude Code stdin
+- Claude Code must include subscriber `rate_limits` data on stdin for the current session
 - Not available for API-key-only users
 
 **Troubleshooting:** If usage doesn't appear:
@@ -206,12 +218,14 @@ To disable, set `display.showUsage` to `false`.
 - API users see no usage display (they have pay-per-token, not rate limits)
 - AWS Bedrock models display `Bedrock` and hide usage limits (usage is managed in AWS)
 - Claude Code may leave `rate_limits` empty until after the first model response in a session
-- Older Claude Code versions that do not emit `rate_limits` will not show subscriber usage
+- Some Claude Code builds and subscription tiers may still omit `rate_limits`, even after the first response
+- When `rate_limits` is missing, ClaudeHUD will hide usage instead of falling back to credential scraping or undocumented API calls
 
 ### Example Configuration
 
 ```json
 {
+  "language": "zh",
   "lineLayout": "expanded",
   "pathLevels": 2,
   "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "agents", "todos"],

@@ -1,16 +1,15 @@
-import { getModelName, getProviderLabel } from '../../stdin.js';
+import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, red, custom as customColor } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, custom as customColor } from '../colors.js';
+import { t } from '../../i18n/index.js';
 export function renderProjectLine(ctx) {
     const display = ctx.config?.display;
     const colors = ctx.config?.colors;
     const parts = [];
     if (display?.showModel !== false) {
-        const model = getModelName(ctx.stdin);
+        const model = formatModelName(getModelName(ctx.stdin), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
         const providerLabel = getProviderLabel(ctx.stdin);
-        const showUsage = display?.showUsage !== false;
-        const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-        const modelQualifier = providerLabel ?? (showUsage && hasApiKey ? red('API') : undefined);
+        const modelQualifier = providerLabel ?? undefined;
         const modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
         parts.push(modelColor(`[${modelDisplay}]`, colors));
     }
@@ -75,7 +74,7 @@ export function renderProjectLine(ctx) {
     if (display?.showSpeed) {
         const speed = getOutputSpeed(ctx.stdin);
         if (speed !== null) {
-            parts.push(label(`out: ${speed.toFixed(1)} tok/s`, colors));
+            parts.push(label(`${t('format.out')}: ${speed.toFixed(1)} ${t('format.tokPerSec')}`, colors));
         }
     }
     if (display?.showDuration !== false && ctx.sessionDuration) {

@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { createHash } from 'node:crypto';
 import { createDebug } from './debug.js';
-import { getClaudeConfigDir, getClaudeConfigJsonPath } from './claude-config-dir.js';
+import { getClaudeConfigDir, getClaudeConfigJsonPath, getHudPluginDir } from './claude-config-dir.js';
 
 const debug = createDebug('config');
 
@@ -11,6 +12,22 @@ export interface ConfigCounts {
   rulesCount: number;
   mcpCount: number;
   hooksCount: number;
+}
+
+interface SentinelState {
+  mtimeMs: number;
+  size: number;
+}
+
+interface ConfigCacheKey {
+  cwd: string | null;
+  claudeConfigDir: string;
+  sentinels: Record<string, SentinelState | null>;
+}
+
+interface ConfigCacheFile {
+  key: ConfigCacheKey;
+  data: ConfigCounts;
 }
 
 // Valid keys for disabled MCP arrays in config files
@@ -119,7 +136,139 @@ function pathsReferToSameLocation(pathA: string, pathB: string): boolean {
   }
 }
 
-export async function countConfigs(cwd?: string): Promise<ConfigCounts> {
+function getConfigCachePath(cwd: string | null, claudeConfigDir: string, homeDir: string): string {
+  const identity = JSON.stringify({ cwd, claudeConfigDir });
+  const hash = createHash('sha256').update(identity).digest('hex');
+  return path.join(getHudPluginDir(homeDir), 'config-cache', `${hash}.json`);
+}
+
+function statSentinel(filePath: string): SentinelState | null {
+  try {
+    const stat = fs.statSync(filePath);
+    return { mtimeMs: stat.mtimeMs, size: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+function buildSentinelPaths(claudeDir: string, claudeConfigJsonPath: string, cwd: string | null): string[] {
+  // Note: We sentinel CLAUDE.md directly instead of claudeDir because the
+  // cache itself is stored under claudeDir/plugins/, which would change
+  // claudeDir's mtime and immediately invalidate the cache on every write.
+  const paths = [
+    path.join(claudeDir, 'CLAUDE.md'),
+    path.join(claudeDir, 'rules'),
+    path.join(claudeDir, 'settings.json'),
+    claudeConfigJsonPath,
+  ];
+
+  if (cwd) {
+    paths.push(
+      cwd,
+      path.join(cwd, '.claude'),
+      path.join(cwd, '.claude', 'rules'),
+      path.join(cwd, '.mcp.json'),
+      path.join(cwd, '.claude', 'settings.json'),
+      path.join(cwd, '.claude', 'settings.local.json'),
+    );
+  }
+
+  return paths;
+}
+
+function collectRuleDirectorySentinels(rulesDir: string): string[] {
+  if (!fs.existsSync(rulesDir)) return [];
+
+  const sentinels = [rulesDir];
+  try {
+    const entries = fs.readdirSync(rulesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      sentinels.push(...collectRuleDirectorySentinels(path.join(rulesDir, entry.name)));
+    }
+  } catch (error) {
+    debug(`Failed to read rule sentinel paths from ${rulesDir}:`, error);
+  }
+
+  return sentinels;
+}
+
+function statSentinels(paths: string[]): Record<string, SentinelState | null> {
+  const result: Record<string, SentinelState | null> = {};
+  for (const p of paths) {
+    result[p] = statSentinel(p);
+  }
+  return result;
+}
+
+function sentinelsMatch(a: Record<string, SentinelState | null>, b: Record<string, SentinelState | null>): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    const sa = a[key];
+    const sb = b[key];
+    if (sa === null && sb === null) continue;
+    if (sa === null || sb === null) return false;
+    if (sa.mtimeMs !== sb.mtimeMs || sa.size !== sb.size) return false;
+  }
+  return true;
+}
+
+function isConfigCounts(value: unknown): value is ConfigCounts {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const counts = value as Partial<ConfigCounts>;
+  return (
+    typeof counts.claudeMdCount === 'number'
+    && Number.isFinite(counts.claudeMdCount)
+    && counts.claudeMdCount >= 0
+    && typeof counts.rulesCount === 'number'
+    && Number.isFinite(counts.rulesCount)
+    && counts.rulesCount >= 0
+    && typeof counts.mcpCount === 'number'
+    && Number.isFinite(counts.mcpCount)
+    && counts.mcpCount >= 0
+    && typeof counts.hooksCount === 'number'
+    && Number.isFinite(counts.hooksCount)
+    && counts.hooksCount >= 0
+  );
+}
+
+function readConfigCache(cacheKey: Pick<ConfigCacheKey, 'cwd' | 'claudeConfigDir'>, homeDir: string): ConfigCacheFile | null {
+  try {
+    const cachePath = getConfigCachePath(cacheKey.cwd, cacheKey.claudeConfigDir, homeDir);
+    const raw = fs.readFileSync(cachePath, 'utf8');
+    const parsed = JSON.parse(raw) as ConfigCacheFile;
+    if (parsed.key?.cwd !== cacheKey.cwd || parsed.key?.claudeConfigDir !== cacheKey.claudeConfigDir) {
+      return null;
+    }
+    if (!isConfigCounts(parsed.data)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeConfigCache(key: ConfigCacheKey, data: ConfigCounts, homeDir: string): void {
+  try {
+    const cachePath = getConfigCachePath(key.cwd, key.claudeConfigDir, homeDir);
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    const payload: ConfigCacheFile = { key, data };
+    fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
+  } catch {
+    // Cache write failures are non-fatal.
+  }
+}
+
+function computeConfigCountsFresh(cwd?: string): ConfigCounts {
   let claudeMdCount = 0;
   let rulesCount = 0;
   let hooksCount = 0;
@@ -233,4 +382,42 @@ export async function countConfigs(cwd?: string): Promise<ConfigCounts> {
   const mcpCount = userMcpServers.size + projectMcpServers.size;
 
   return { claudeMdCount, rulesCount, mcpCount, hooksCount };
+}
+
+export async function countConfigs(cwd?: string): Promise<ConfigCounts> {
+  const homeDir = os.homedir();
+  const claudeDir = getClaudeConfigDir(homeDir);
+  const claudeConfigJsonPath = getClaudeConfigJsonPath(homeDir);
+  const normalizedCwd = cwd ? path.resolve(cwd) : null;
+
+  const staticSentinelPaths = buildSentinelPaths(claudeDir, claudeConfigJsonPath, normalizedCwd);
+  const cached = readConfigCache({ cwd: normalizedCwd, claudeConfigDir: claudeDir }, homeDir);
+  const cacheValidationPaths = cached
+    ? Array.from(new Set([...staticSentinelPaths, ...Object.keys(cached.key.sentinels)]))
+    : staticSentinelPaths;
+  const currentSentinels = statSentinels(cacheValidationPaths);
+
+  if (cached && sentinelsMatch(cached.key.sentinels, currentSentinels)) {
+    return cached.data;
+  }
+
+  const result = computeConfigCountsFresh(cwd);
+
+  const ruleSentinelPaths = collectRuleDirectorySentinels(path.join(claudeDir, 'rules'));
+  const projectClaudeDir = normalizedCwd ? path.join(normalizedCwd, '.claude') : null;
+  const projectClaudeOverlapsUserScope = projectClaudeDir
+    ? pathsReferToSameLocation(projectClaudeDir, claudeDir)
+    : false;
+  if (normalizedCwd && !projectClaudeOverlapsUserScope) {
+    ruleSentinelPaths.push(...collectRuleDirectorySentinels(path.join(normalizedCwd, '.claude', 'rules')));
+  }
+
+  const cacheSentinelPaths = Array.from(new Set([...staticSentinelPaths, ...ruleSentinelPaths]));
+  const cacheKey: ConfigCacheKey = {
+    cwd: normalizedCwd,
+    claudeConfigDir: claudeDir,
+    sentinels: statSentinels(cacheSentinelPaths),
+  };
+  writeConfigCache(cacheKey, result, homeDir);
+  return result;
 }
