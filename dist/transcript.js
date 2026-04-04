@@ -5,6 +5,24 @@ import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
 let createReadStreamImpl = fs.createReadStream;
+function normalizeTokenCount(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 0;
+    }
+    return Math.max(0, Math.trunc(value));
+}
+function normalizeSessionTokens(tokens) {
+    if (!tokens || typeof tokens !== 'object') {
+        return undefined;
+    }
+    const raw = tokens;
+    return {
+        inputTokens: normalizeTokenCount(raw.inputTokens),
+        outputTokens: normalizeTokenCount(raw.outputTokens),
+        cacheCreationTokens: normalizeTokenCount(raw.cacheCreationTokens),
+        cacheReadTokens: normalizeTokenCount(raw.cacheReadTokens),
+    };
+}
 function getTranscriptCachePath(transcriptPath, homeDir) {
     const hash = createHash('sha256').update(path.resolve(transcriptPath)).digest('hex');
     return path.join(getHudPluginDir(homeDir), 'transcript-cache', `${hash}.json`);
@@ -39,6 +57,7 @@ function serializeTranscriptData(data) {
         todos: data.todos.map((todo) => ({ ...todo })),
         sessionStart: data.sessionStart?.toISOString(),
         sessionName: data.sessionName,
+        sessionTokens: data.sessionTokens,
     };
 }
 function deserializeTranscriptData(data) {
@@ -56,6 +75,7 @@ function deserializeTranscriptData(data) {
         todos: data.todos.map((todo) => ({ ...todo })),
         sessionStart: data.sessionStart ? new Date(data.sessionStart) : undefined,
         sessionName: data.sessionName,
+        sessionTokens: normalizeSessionTokens(data.sessionTokens),
     };
 }
 function readTranscriptCache(transcriptPath, state) {
@@ -112,6 +132,12 @@ export async function parseTranscript(transcriptPath) {
     const taskIdToIndex = new Map();
     let latestSlug;
     let customTitle;
+    const sessionTokens = {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+    };
     let parsedCleanly = false;
     try {
         const fileStream = createReadStreamImpl(transcriptPath);
@@ -130,6 +156,14 @@ export async function parseTranscript(transcriptPath) {
                 else if (typeof entry.slug === 'string') {
                     latestSlug = entry.slug;
                 }
+                // Accumulate token usage from assistant messages
+                if (entry.type === 'assistant' && entry.message?.usage) {
+                    const usage = entry.message.usage;
+                    sessionTokens.inputTokens += normalizeTokenCount(usage.input_tokens);
+                    sessionTokens.outputTokens += normalizeTokenCount(usage.output_tokens);
+                    sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
+                    sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
+                }
                 processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
             }
             catch {
@@ -145,6 +179,7 @@ export async function parseTranscript(transcriptPath) {
     result.agents = Array.from(agentMap.values()).slice(-10);
     result.todos = latestTodos;
     result.sessionName = customTitle ?? latestSlug;
+    result.sessionTokens = sessionTokens;
     if (parsedCleanly) {
         writeTranscriptCache(transcriptPath, transcriptState, result);
     }

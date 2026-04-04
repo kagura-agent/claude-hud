@@ -180,6 +180,14 @@ export function renderSessionLine(ctx) {
             }
         }
     }
+    // Session token usage (cumulative)
+    if (display?.showSessionTokens && ctx.transcript.sessionTokens) {
+        const st = ctx.transcript.sessionTokens;
+        const total = st.inputTokens + st.outputTokens + st.cacheCreationTokens + st.cacheReadTokens;
+        if (total > 0) {
+            parts.push(label(`tok: ${formatTokens(total)} (in: ${formatTokens(st.inputTokens)}, out: ${formatTokens(st.outputTokens)})`, colors));
+        }
+    }
     // Session duration
     if (display?.showSpeed) {
         const speed = getOutputSpeed(ctx.stdin);

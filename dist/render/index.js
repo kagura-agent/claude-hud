@@ -3,7 +3,7 @@ import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
-import { renderIdentityLine, renderProjectLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, } from './lines/index.js';
+import { renderIdentityLine, renderProjectLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
 // eslint-disable-next-line no-control-regex
@@ -353,6 +353,13 @@ export function render(ctx) {
     if (lineLayout === 'expanded') {
         const renderedLines = renderExpanded(ctx);
         lines = renderedLines.map(({ line }) => line);
+        // Session token usage (cumulative)
+        if (ctx.config?.display?.showSessionTokens) {
+            const sessionTokensLine = renderSessionTokensLine(ctx);
+            if (sessionTokensLine) {
+                lines.push(sessionTokensLine);
+            }
+        }
         if (showSeparators) {
             const firstActivityIndex = renderedLines.findIndex(({ isActivity }) => isActivity);
             if (firstActivityIndex > 0) {
