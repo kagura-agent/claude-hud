@@ -2,6 +2,7 @@ export type MessageKey =
   // Labels
   | "label.context"
   | "label.usage"
+  | "label.weekly"
   | "label.approxRam"
   | "label.rules"
   | "label.hooks"

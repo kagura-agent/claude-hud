@@ -46,7 +46,7 @@ export function renderUsageLine(ctx: RenderContext): string | null {
 
   if (fiveHour === null && sevenDay !== null) {
     const weeklyOnlyPart = formatUsageWindowPart({
-      label: "7d",
+      label: t("label.weekly"),
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       colors,
@@ -68,12 +68,13 @@ export function renderUsageLine(ctx: RenderContext): string | null {
 
   if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
     const sevenDayPart = formatUsageWindowPart({
-      label: "7d",
+      label: t("label.weekly"),
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       colors,
       usageBarEnabled,
       barWidth,
+      forceLabel: true,
     });
     return `${usageLabel} ${fiveHourPart} | ${sevenDayPart}`;
   }
@@ -93,7 +94,7 @@ function formatUsagePercent(
 }
 
 function formatUsageWindowPart({
-  label,
+  label: windowLabel,
   percent,
   resetAt,
   colors,
@@ -101,7 +102,7 @@ function formatUsageWindowPart({
   barWidth,
   forceLabel = false,
 }: {
-  label: "5h" | "7d";
+  label: string;
   percent: number | null;
   resetAt: Date | null;
   colors?: RenderContext["config"]["colors"];
@@ -111,17 +112,18 @@ function formatUsageWindowPart({
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);
   const reset = formatResetTime(resetAt);
+  const styledLabel = label(windowLabel, colors);
 
   if (usageBarEnabled) {
     const body = reset
       ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
       : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
-    return forceLabel ? `${label}: ${body}` : body;
+    return forceLabel ? `${styledLabel} ${body}` : body;
   }
 
   return reset
-    ? `${label}: ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-    : `${label}: ${usageDisplay}`;
+    ? `${styledLabel} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
+    : `${styledLabel} ${usageDisplay}`;
 }
 
 function formatResetTime(resetAt: Date | null): string {
