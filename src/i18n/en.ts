@@ -8,7 +8,8 @@ export const en: Messages = {
   "label.approxRam": "Approx RAM",
   "label.rules": "rules",
   "label.hooks": "hooks",
-  "label.cost": "Cost ($USD)",
+  "label.estimatedCost": "Est.",
+  "label.cost": "Cost",
 
   // Status
   "status.limitReached": "Limit reached",

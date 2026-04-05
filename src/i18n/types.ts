@@ -6,6 +6,7 @@ export type MessageKey =
   | "label.approxRam"
   | "label.rules"
   | "label.hooks"
+  | "label.estimatedCost"
   | "label.cost"
   // Status
   | "status.limitReached"

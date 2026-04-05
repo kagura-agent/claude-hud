@@ -43,7 +43,6 @@ function baseContext() {
     sessionDuration: '',
     gitStatus: null,
     usageData: null,
-    costUsd: null,
     memoryUsage: null,
     config: {
       lineLayout: 'compact',
@@ -592,35 +591,58 @@ test('renderProjectLine includes duration when showDuration is true', () => {
   assert.ok(line?.includes('12m 34s'), 'should include session duration');
 });
 
-test('renderSessionLine shows cost when enabled and costUsd is available', () => {
+test('renderSessionLine shows native cost when stdin cost.total_cost_usd is available', () => {
   const ctx = baseContext();
   ctx.config.display.showCost = true;
-  ctx.costUsd = 5.47;
+  ctx.stdin.cost = { total_cost_usd: 5.47 };
 
   const line = stripAnsi(renderSessionLine(ctx));
-  assert.ok(line.includes('Cost ($USD) $5.47'));
+  assert.ok(line.includes('Cost $5.47'));
 });
 
-test('renderProjectLine hides cost when costUsd is null', () => {
+test('renderProjectLine falls back to an estimate when native cost is absent', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = '/tmp/my-project';
   ctx.config.display.showCost = true;
-  ctx.costUsd = null;
+  ctx.stdin.model = { display_name: 'Claude Opus 4.5' };
+  ctx.transcript.sessionTokens = {
+    inputTokens: 100000,
+    cacheCreationTokens: 10000,
+    cacheReadTokens: 20000,
+    outputTokens: 50000,
+  };
 
   const line = stripAnsi(renderProjectLine(ctx));
-  assert.ok(!line.includes('Cost ($USD)'), 'cost should be hidden when costUsd is null');
+  assert.ok(line.includes('Est. $5.47'), `expected fallback estimate, got: ${line}`);
 });
 
-test('renderProjectLine translates cost label when Chinese is enabled', () => {
+test('renderProjectLine hides cost for provider-routed sessions', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.stdin.model = { id: 'anthropic.claude-sonnet-4-20250514-v1:0' };
+  ctx.config.display.showCost = true;
+  ctx.stdin.cost = { total_cost_usd: 0 };
+  ctx.transcript.sessionTokens = {
+    inputTokens: 100000,
+    cacheCreationTokens: 10000,
+    cacheReadTokens: 20000,
+    outputTokens: 50000,
+  };
+
+  const line = stripAnsi(renderProjectLine(ctx));
+  assert.ok(!line.includes('Cost '), 'cost should stay hidden when billing is routed through the provider');
+});
+
+test('renderProjectLine translates native cost label when Chinese is enabled', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = '/tmp/my-project';
   ctx.config.display.showCost = true;
-  ctx.costUsd = 5.47;
+  ctx.stdin.cost = { total_cost_usd: 5.47 };
 
   setLanguage('zh');
   try {
     const line = stripAnsi(renderProjectLine(ctx));
-    assert.ok(line.includes('耗油量（美元）'));
+    assert.ok(line.includes('费用 $5.47'));
   } finally {
     setLanguage('en');
   }

@@ -108,7 +108,6 @@ export interface RenderContext {
   sessionDuration: string;
   gitStatus: GitStatus | null;
   usageData: UsageData | null;
-  costUsd: number | null;
   memoryUsage: MemoryInfo | null;
   config: HudConfig;
   extraLabel: string | null;

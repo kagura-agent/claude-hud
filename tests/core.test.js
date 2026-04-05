@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { _setCreateReadStreamForTests, parseTranscript } from '../dist/transcript.js';
 import { countConfigs } from '../dist/config-reader.js';
 import { getContextPercent, getBufferedPercent, getModelName, getProviderLabel, getUsageFromStdin, isBedrockModelId, stripContextSuffix, formatModelName } from '../dist/stdin.js';
-import { formatUsd } from '../dist/cost.js';
+import { estimateSessionCost, resolveSessionCost, formatUsd } from '../dist/cost.js';
 import * as fs from 'node:fs';
 
 function restoreEnvVar(name, value) {
@@ -337,6 +337,93 @@ test('bedrock model detection recognizes bedrock ids', () => {
   assert.equal(isBedrockModelId('claude-3-5-sonnet-20241022'), false);
   assert.equal(getProviderLabel({ model: { id: 'anthropic.claude-3-5-sonnet-20240620-v1:0' } }), 'Bedrock');
   assert.equal(getProviderLabel({ model: { id: 'claude-3-5-sonnet-20241022' } }), null);
+});
+
+test('resolveSessionCost prefers native stdin cost when available', () => {
+  const cost = resolveSessionCost(
+    {
+      model: { display_name: 'Claude Sonnet 4.5' },
+      cost: { total_cost_usd: 1.23 },
+    },
+    {
+      inputTokens: 100000,
+      cacheCreationTokens: 10000,
+      cacheReadTokens: 20000,
+      outputTokens: 50000,
+    },
+  );
+
+  assert.deepEqual(cost, {
+    totalUsd: 1.23,
+    source: 'native',
+  });
+});
+
+test('resolveSessionCost falls back to transcript estimation when native cost is absent', () => {
+  const cost = resolveSessionCost(
+    { model: { display_name: 'Claude Opus 4.5' } },
+    {
+      inputTokens: 100000,
+      cacheCreationTokens: 10000,
+      cacheReadTokens: 20000,
+      outputTokens: 50000,
+    },
+  );
+
+  assert.ok(cost, 'expected fallback estimate');
+  assert.equal(cost?.source, 'estimate');
+  assert.equal(formatUsd(cost?.totalUsd ?? 0), '$5.47');
+});
+
+test('resolveSessionCost ignores native cost for provider-routed sessions', () => {
+  const cost = resolveSessionCost(
+    {
+      model: { id: 'anthropic.claude-sonnet-4-20250514-v1:0' },
+      cost: { total_cost_usd: 0 },
+    },
+    {
+      inputTokens: 100000,
+      cacheCreationTokens: 10000,
+      cacheReadTokens: 20000,
+      outputTokens: 50000,
+    },
+  );
+
+  assert.equal(cost, null);
+});
+
+test('resolveSessionCost falls back when native cost is invalid', () => {
+  const cost = resolveSessionCost(
+    {
+      model: { display_name: 'Claude Sonnet 4.5' },
+      cost: { total_cost_usd: Number.NaN },
+    },
+    {
+      inputTokens: 100000,
+      cacheCreationTokens: 10000,
+      cacheReadTokens: 20000,
+      outputTokens: 50000,
+    },
+  );
+
+  assert.ok(cost, 'expected fallback estimate');
+  assert.equal(cost?.source, 'estimate');
+  assert.equal(formatUsd(cost?.totalUsd ?? 0), '$1.09');
+});
+
+test('estimateSessionCost still calculates transcript-based Anthropic pricing', () => {
+  const estimate = estimateSessionCost(
+    { model: { display_name: 'Claude Sonnet 4.5' } },
+    {
+      inputTokens: 100000,
+      cacheCreationTokens: 10000,
+      cacheReadTokens: 20000,
+      outputTokens: 50000,
+    },
+  );
+
+  assert.ok(estimate, 'expected transcript estimate');
+  assert.equal(formatUsd(estimate.totalUsd), '$1.09');
 });
 
 

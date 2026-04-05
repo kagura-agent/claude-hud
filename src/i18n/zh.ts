@@ -8,7 +8,8 @@ export const zh: Messages = {
   "label.approxRam": "内存",
   "label.rules": "规则",
   "label.hooks": "钩子",
-  "label.cost": "耗油量（美元）",
+  "label.estimatedCost": "估算",
+  "label.cost": "费用",
 
   // Status
   "status.limitReached": "已达上限",
