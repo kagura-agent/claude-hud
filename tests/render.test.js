@@ -49,6 +49,7 @@ function baseContext() {
       showSeparators: false,
       pathLevels: 1,
       elementOrder: ['project', 'context', 'usage', 'memory', 'environment', 'tools', 'agents', 'todos'],
+      mergeGroups: [['context', 'usage']],
       gitStatus: { enabled: true, showDirty: true, showAheadBehind: false, showFileStats: false, pushWarningThreshold: 0, pushCriticalThreshold: 0 },
       display: { showModel: true, showProject: true, showContextBar: true, contextValue: 'percent', showConfigCounts: true, showCost: false, showDuration: true, showSpeed: false, showTokenBreakdown: true, showUsage: true, usageBarEnabled: false, showTools: true, showAgents: true, showTodos: true, showSessionTokens: false, showSessionName: false, showClaudeCodeVersion: false, showMemoryUsage: false, showOutputStyle: false, autocompactBuffer: 'enabled', usageThreshold: 0, sevenDayThreshold: 80, environmentThreshold: 0, customLine: '' },
       colors: {
@@ -1855,4 +1856,56 @@ test('renderSessionLine includes compact session token summary when enabled', ()
 
   const line = stripAnsi(renderSessionLine(ctx));
   assert.ok(line.includes('tok: 2k (in: 2k, out: 250)'), 'should include compact token summary');
+});
+
+// ── mergeGroups configuration tests ──────────────────────────────
+
+function captureRender(ctx) {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (line) => logs.push(line);
+  try {
+    render(ctx);
+  } finally {
+    console.log = originalLog;
+  }
+  return logs.map(l => stripAnsi(l));
+}
+
+function mergeGroupCtx() {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
+  ctx.stdin.context_window.current_usage.input_tokens = 10000;
+  ctx.usageData = { fiveHour: 25, sevenDay: null, fiveHourResetAt: null, sevenDayResetAt: null };
+  return ctx;
+}
+
+test('mergeGroups: default merges context and usage on one line', () => {
+  const ctx = mergeGroupCtx();
+  ctx.config.mergeGroups = [['context', 'usage']];
+  const lines = captureRender(ctx);
+  const merged = lines.find(l => l.includes('│'));
+  assert.ok(merged, 'should have a merged line with │ separator');
+});
+
+test('mergeGroups: empty array disables merging', () => {
+  const ctx = mergeGroupCtx();
+  ctx.config.mergeGroups = [];
+  const lines = captureRender(ctx);
+  const merged = lines.find(l => l.includes('│'));
+  assert.strictEqual(merged, undefined, 'no lines should be merged when mergeGroups is empty');
+});
+
+test('mergeGroups: width overflow falls back to separate lines', () => {
+  const ctx = mergeGroupCtx();
+  ctx.config.mergeGroups = [['context', 'usage']];
+  const origColumns = process.stdout.columns;
+  process.stdout.columns = 20;
+  try {
+    const lines = captureRender(ctx);
+    const merged = lines.find(l => l.includes('│'));
+    assert.strictEqual(merged, undefined, 'should not merge when terminal is too narrow');
+  } finally {
+    process.stdout.columns = origColumns;
+  }
 });

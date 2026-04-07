@@ -19,6 +19,7 @@ export const DEFAULT_CONFIG = {
     showSeparators: false,
     pathLevels: 1,
     elementOrder: [...DEFAULT_ELEMENT_ORDER],
+    mergeGroups: [['context', 'usage']],
     gitStatus: {
         enabled: true,
         showDirty: true,
@@ -130,6 +131,27 @@ function validateElementOrder(value) {
     }
     return elementOrder.length > 0 ? elementOrder : [...DEFAULT_ELEMENT_ORDER];
 }
+function validateMergeGroups(value) {
+    if (!Array.isArray(value)) {
+        return [...DEFAULT_CONFIG.mergeGroups.map(g => [...g])];
+    }
+    const groups = [];
+    for (const group of value) {
+        if (!Array.isArray(group)) {
+            continue;
+        }
+        const validElements = [];
+        for (const item of group) {
+            if (typeof item === 'string' && KNOWN_ELEMENTS.has(item)) {
+                validElements.push(item);
+            }
+        }
+        if (validElements.length >= 2) {
+            groups.push(validElements);
+        }
+    }
+    return groups;
+}
 function migrateConfig(userConfig) {
     const migrated = { ...userConfig };
     if ('layout' in userConfig && !('lineLayout' in userConfig)) {
@@ -184,6 +206,7 @@ export function mergeConfig(userConfig) {
         ? migrated.pathLevels
         : DEFAULT_CONFIG.pathLevels;
     const elementOrder = validateElementOrder(migrated.elementOrder);
+    const mergeGroups = validateMergeGroups(migrated.mergeGroups);
     const gitStatus = {
         enabled: typeof migrated.gitStatus?.enabled === 'boolean'
             ? migrated.gitStatus.enabled
@@ -309,7 +332,7 @@ export function mergeConfig(userConfig) {
             ? migrated.colors.custom
             : DEFAULT_CONFIG.colors.custom,
     };
-    return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };
+    return { language, lineLayout, showSeparators, pathLevels, elementOrder, mergeGroups, gitStatus, display, colors };
 }
 export async function loadConfig() {
     const configPath = getConfigPath();

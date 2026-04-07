@@ -34,6 +34,7 @@ export interface HudConfig {
     showSeparators: boolean;
     pathLevels: 1 | 2 | 3;
     elementOrder: HudElement[];
+    mergeGroups: HudElement[][];
     gitStatus: {
         enabled: boolean;
         showDirty: boolean;

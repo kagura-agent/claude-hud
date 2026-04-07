@@ -375,8 +375,17 @@ function renderCompact(ctx: RenderContext): string[] {
 
 function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null): Array<{ line: string; isActivity: boolean }> {
   const elementOrder = ctx.config?.elementOrder ?? DEFAULT_ELEMENT_ORDER;
+  const mergeGroups: HudElement[][] = ctx.config?.mergeGroups ?? [['context', 'usage']];
   const seen = new Set<HudElement>();
   const lines: Array<{ line: string; isActivity: boolean }> = [];
+
+  // Build a lookup: element -> group it belongs to
+  const elementToGroup = new Map<HudElement, HudElement[]>();
+  for (const group of mergeGroups) {
+    for (const el of group) {
+      elementToGroup.set(el, group);
+    }
+  }
 
   for (let index = 0; index < elementOrder.length; index += 1) {
     const element = elementOrder[index];
@@ -384,34 +393,57 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
       continue;
     }
 
-    const nextElement = elementOrder[index + 1];
-    if (
-      (element === 'context' && nextElement === 'usage' && !seen.has('usage'))
-      || (element === 'usage' && nextElement === 'context' && !seen.has('context'))
-    ) {
-      seen.add(element);
-      seen.add(nextElement);
-
-      const firstLine = renderElementLine(ctx, element);
-      const secondLine = renderElementLine(ctx, nextElement);
-
-      if (firstLine && secondLine) {
-        const combinedLine = `${firstLine} │ ${secondLine}`;
-        const canCombine = !terminalWidth || visualLength(combinedLine) <= terminalWidth;
-
-        if (canCombine) {
-          lines.push({ line: combinedLine, isActivity: false });
-        } else {
-          lines.push({ line: firstLine, isActivity: false });
-          lines.push({ line: secondLine, isActivity: false });
+    const group = elementToGroup.get(element);
+    if (group) {
+      // Check if the remaining unseen members of this group appear consecutively starting here
+      const groupMembers: HudElement[] = [];
+      let scanIndex = index;
+      while (scanIndex < elementOrder.length) {
+        const candidate = elementOrder[scanIndex];
+        if (seen.has(candidate)) {
+          scanIndex += 1;
+          continue;
         }
-      } else if (firstLine) {
-        lines.push({ line: firstLine, isActivity: false });
-      } else if (secondLine) {
-        lines.push({ line: secondLine, isActivity: false });
+        if (group.includes(candidate)) {
+          groupMembers.push(candidate);
+          scanIndex += 1;
+        } else {
+          break;
+        }
       }
 
-      continue;
+      if (groupMembers.length >= 2) {
+        // Mark all members as seen
+        for (const member of groupMembers) {
+          seen.add(member);
+        }
+
+        // Render each member
+        const renderedParts: string[] = [];
+        for (const member of groupMembers) {
+          const memberLine = renderElementLine(ctx, member);
+          if (memberLine) {
+            renderedParts.push(memberLine);
+          }
+        }
+
+        if (renderedParts.length >= 2) {
+          const combinedLine = renderedParts.join(' │ ');
+          const canCombine = !terminalWidth || visualLength(combinedLine) <= terminalWidth;
+
+          if (canCombine) {
+            lines.push({ line: combinedLine, isActivity: false });
+          } else {
+            for (const part of renderedParts) {
+              lines.push({ line: part, isActivity: false });
+            }
+          }
+        } else if (renderedParts.length === 1) {
+          lines.push({ line: renderedParts[0], isActivity: false });
+        }
+
+        continue;
+      }
     }
 
     seen.add(element);

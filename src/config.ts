@@ -64,6 +64,7 @@ export interface HudConfig {
   showSeparators: boolean;
   pathLevels: 1 | 2 | 3;
   elementOrder: HudElement[];
+  mergeGroups: HudElement[][];
   gitStatus: {
     enabled: boolean;
     showDirty: boolean;
@@ -109,6 +110,7 @@ export const DEFAULT_CONFIG: HudConfig = {
   showSeparators: false,
   pathLevels: 1,
   elementOrder: [...DEFAULT_ELEMENT_ORDER],
+  mergeGroups: [['context', 'usage']],
   gitStatus: {
     enabled: true,
     showDirty: true,
@@ -234,6 +236,32 @@ function validateElementOrder(value: unknown): HudElement[] {
   return elementOrder.length > 0 ? elementOrder : [...DEFAULT_ELEMENT_ORDER];
 }
 
+function validateMergeGroups(value: unknown): HudElement[][] {
+  if (!Array.isArray(value)) {
+    return [...DEFAULT_CONFIG.mergeGroups.map(g => [...g])];
+  }
+
+  const groups: HudElement[][] = [];
+  for (const group of value) {
+    if (!Array.isArray(group)) {
+      continue;
+    }
+
+    const validElements: HudElement[] = [];
+    for (const item of group) {
+      if (typeof item === 'string' && KNOWN_ELEMENTS.has(item as HudElement)) {
+        validElements.push(item as HudElement);
+      }
+    }
+
+    if (validElements.length >= 2) {
+      groups.push(validElements);
+    }
+  }
+
+  return groups;
+}
+
 interface LegacyConfig {
   layout?: 'default' | 'separators' | Record<string, unknown>;
 }
@@ -295,6 +323,7 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     : DEFAULT_CONFIG.pathLevels;
 
   const elementOrder = validateElementOrder(migrated.elementOrder);
+  const mergeGroups = validateMergeGroups(migrated.mergeGroups);
 
   const gitStatus = {
     enabled: typeof migrated.gitStatus?.enabled === 'boolean'
@@ -424,7 +453,7 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       : DEFAULT_CONFIG.colors.custom,
   };
 
-  return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };
+  return { language, lineLayout, showSeparators, pathLevels, elementOrder, mergeGroups, gitStatus, display, colors };
 }
 
 export async function loadConfig(): Promise<HudConfig> {
