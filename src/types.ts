@@ -96,6 +96,7 @@ export interface TranscriptData {
   sessionStart?: Date;
   sessionName?: string;
   sessionTokens?: SessionTokenUsage;
+  lastAssistantTimestamp?: Date;
 }
 
 export interface RenderContext {

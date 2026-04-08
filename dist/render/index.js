@@ -3,7 +3,7 @@ import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
-import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, } from './lines/index.js';
+import { renderIdentityLine, renderProjectLine, renderGitFilesLine, renderEnvironmentLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderCacheTtlLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
 // eslint-disable-next-line no-control-regex
@@ -296,6 +296,8 @@ function renderElementLine(ctx, element) {
             return display?.showAgents === false ? null : renderAgentsLine(ctx);
         case 'todos':
             return display?.showTodos === false ? null : renderTodosLine(ctx);
+        case 'cache':
+            return renderCacheTtlLine(ctx);
     }
 }
 function renderCompact(ctx) {

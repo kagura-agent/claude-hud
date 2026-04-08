@@ -53,6 +53,7 @@ interface SerializedTranscriptData {
   sessionStart?: string;
   sessionName?: string;
   sessionTokens?: SessionTokenUsage;
+  lastAssistantTimestamp?: string;
 }
 
 interface TranscriptCacheFile {
@@ -121,6 +122,7 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
     sessionStart: data.sessionStart?.toISOString(),
     sessionName: data.sessionName,
     sessionTokens: data.sessionTokens,
+    lastAssistantTimestamp: data.lastAssistantTimestamp?.toISOString(),
   };
 }
 
@@ -140,6 +142,7 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
     sessionStart: data.sessionStart ? new Date(data.sessionStart) : undefined,
     sessionName: data.sessionName,
     sessionTokens: normalizeSessionTokens(data.sessionTokens),
+    lastAssistantTimestamp: data.lastAssistantTimestamp ? new Date(data.lastAssistantTimestamp) : undefined,
   };
 }
 
@@ -212,6 +215,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
   };
 
   let parsedCleanly = false;
+  let lastAssistantTimestamp: Date | undefined;
 
   try {
     const fileStream = createReadStreamImpl(transcriptPath);
@@ -238,6 +242,9 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
           sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
           sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
         }
+        if (entry.type === 'assistant' && entry.timestamp) {
+          lastAssistantTimestamp = new Date(entry.timestamp);
+        }
         processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
       } catch {
         // Skip malformed lines
@@ -254,6 +261,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
   result.todos = latestTodos;
   result.sessionName = customTitle ?? latestSlug;
   result.sessionTokens = sessionTokens;
+  result.lastAssistantTimestamp = lastAssistantTimestamp;
   if (parsedCleanly) {
     writeTranscriptCache(transcriptPath, transcriptState, result);
   }

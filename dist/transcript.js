@@ -58,6 +58,7 @@ function serializeTranscriptData(data) {
         sessionStart: data.sessionStart?.toISOString(),
         sessionName: data.sessionName,
         sessionTokens: data.sessionTokens,
+        lastAssistantTimestamp: data.lastAssistantTimestamp?.toISOString(),
     };
 }
 function deserializeTranscriptData(data) {
@@ -76,6 +77,7 @@ function deserializeTranscriptData(data) {
         sessionStart: data.sessionStart ? new Date(data.sessionStart) : undefined,
         sessionName: data.sessionName,
         sessionTokens: normalizeSessionTokens(data.sessionTokens),
+        lastAssistantTimestamp: data.lastAssistantTimestamp ? new Date(data.lastAssistantTimestamp) : undefined,
     };
 }
 function readTranscriptCache(transcriptPath, state) {
@@ -139,6 +141,7 @@ export async function parseTranscript(transcriptPath) {
         cacheReadTokens: 0,
     };
     let parsedCleanly = false;
+    let lastAssistantTimestamp;
     try {
         const fileStream = createReadStreamImpl(transcriptPath);
         const rl = readline.createInterface({
@@ -164,6 +167,9 @@ export async function parseTranscript(transcriptPath) {
                     sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
                     sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
                 }
+                if (entry.type === 'assistant' && entry.timestamp) {
+                    lastAssistantTimestamp = new Date(entry.timestamp);
+                }
                 processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
             }
             catch {
@@ -180,6 +186,7 @@ export async function parseTranscript(transcriptPath) {
     result.todos = latestTodos;
     result.sessionName = customTitle ?? latestSlug;
     result.sessionTokens = sessionTokens;
+    result.lastAssistantTimestamp = lastAssistantTimestamp;
     if (parsedCleanly) {
         writeTranscriptCache(transcriptPath, transcriptState, result);
     }

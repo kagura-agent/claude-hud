@@ -10,10 +10,12 @@ export const zh: Messages = {
   "label.hooks": "钩子",
   "label.estimatedCost": "估算",
   "label.cost": "费用",
+  "label.cache": "缓存",
 
   // Status
   "status.limitReached": "已达上限",
   "status.allTodosComplete": "全部完成",
+  "status.cacheExpired": "已过期",
 
   // Format
   "format.resets": "重置于",

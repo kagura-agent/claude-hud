@@ -10,10 +10,12 @@ export const en: Messages = {
   "label.hooks": "hooks",
   "label.estimatedCost": "Est.",
   "label.cost": "Cost",
+  "label.cache": "Cache",
 
   // Status
   "status.limitReached": "Limit reached",
   "status.allTodosComplete": "All todos complete",
+  "status.cacheExpired": "expired",
 
   // Format
   "format.resets": "resets",

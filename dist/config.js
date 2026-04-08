@@ -6,6 +6,7 @@ export const DEFAULT_ELEMENT_ORDER = [
     'project',
     'context',
     'usage',
+    'cache',
     'memory',
     'environment',
     'tools',
@@ -47,6 +48,8 @@ export const DEFAULT_CONFIG = {
         showMemoryUsage: false,
         showSessionTokens: false,
         showOutputStyle: false,
+        showCacheTtl: false,
+        cacheTtlSeconds: 300,
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
         sevenDayThreshold: 80,
@@ -258,6 +261,14 @@ export function mergeConfig(userConfig) {
         showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
             ? migrated.display.showOutputStyle
             : DEFAULT_CONFIG.display.showOutputStyle,
+        showCacheTtl: typeof migrated.display?.showCacheTtl === 'boolean'
+            ? migrated.display.showCacheTtl
+            : DEFAULT_CONFIG.display.showCacheTtl,
+        cacheTtlSeconds: typeof migrated.display?.cacheTtlSeconds === 'number'
+            && Number.isFinite(migrated.display.cacheTtlSeconds)
+            && migrated.display.cacheTtlSeconds > 0
+            ? Math.floor(migrated.display.cacheTtlSeconds)
+            : DEFAULT_CONFIG.display.cacheTtlSeconds,
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
             : DEFAULT_CONFIG.display.autocompactBuffer,

@@ -17,7 +17,7 @@ export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
  *   short:   Strip context suffix AND "Claude " prefix (e.g. "Opus 4.6")
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
-export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'context' | 'usage' | 'cache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
   | 'red'
@@ -49,6 +49,7 @@ export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
   'project',
   'context',
   'usage',
+  'cache',
   'memory',
   'environment',
   'tools',
@@ -92,6 +93,8 @@ export interface HudConfig {
     showMemoryUsage: boolean;
     showSessionTokens: boolean;
     showOutputStyle: boolean;
+    showCacheTtl: boolean;
+    cacheTtlSeconds: number;
     autocompactBuffer: AutocompactBufferMode;
     usageThreshold: number;
     sevenDayThreshold: number;
@@ -137,6 +140,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     showMemoryUsage: false,
     showSessionTokens: false,
     showOutputStyle: false,
+    showCacheTtl: false,
+    cacheTtlSeconds: 300,
     autocompactBuffer: 'enabled',
     usageThreshold: 0,
     sevenDayThreshold: 80,
@@ -371,6 +376,14 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
       ? migrated.display.showOutputStyle
       : DEFAULT_CONFIG.display.showOutputStyle,
+    showCacheTtl: typeof migrated.display?.showCacheTtl === 'boolean'
+      ? migrated.display.showCacheTtl
+      : DEFAULT_CONFIG.display.showCacheTtl,
+    cacheTtlSeconds: typeof migrated.display?.cacheTtlSeconds === 'number'
+      && Number.isFinite(migrated.display.cacheTtlSeconds)
+      && migrated.display.cacheTtlSeconds > 0
+      ? Math.floor(migrated.display.cacheTtlSeconds)
+      : DEFAULT_CONFIG.display.cacheTtlSeconds,
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
       : DEFAULT_CONFIG.display.autocompactBuffer,
